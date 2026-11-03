@@ -17,7 +17,8 @@ Aplikasi Visualizer Piano & MIDI interaktif profesional dengan efek visual Synth
 
 ## 🚀 Cara Export & Menjalankan di Windows (.EXE)
 
-Karena Flutter Windows membutuhkan toolchain C++ Microsoft (MSVC) bawaan Windows, Anda dapat mem-build file `.exe` dengan salah satu cara berikut:
+> 📘 **Untuk Panduan Lengkap Pemula / Non-IT:**  
+> Silakan buka panduan langkah-demi-langkah lengkap di **[PANDUAN_PEMULA_WINDOWS.md](file:///home/okkata/develop/app/midi/PANDUAN_PEMULA_WINDOWS.md)**. Panduan tersebut memuat link download resmi, cara centang Visual Studio C++, ekstrak Flutter, dan setting Path.
 
 ### Opsi 1: Build Otomatis di Windows (Paling Mudah)
 Jika Anda membuka folder proyek ini di komputer / laptop Windows:
