@@ -47,6 +47,7 @@ class MidiSong {
     for (final note in notes) {
       note.isHit = false;
       note.isMissed = false;
+      note.isSoundPlayed = false;
     }
   }
 

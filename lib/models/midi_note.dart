@@ -19,6 +19,7 @@ class MidiNote {
   // Runtime playback states
   bool isHit;
   bool isMissed;
+  bool isSoundPlayed;
 
   MidiNote({
     required this.pitch,
@@ -29,6 +30,7 @@ class MidiNote {
     this.channel = 0,
     this.isHit = false,
     this.isMissed = false,
+    this.isSoundPlayed = false,
   });
 
   int get endTimeMs => startTimeMs + durationMs;

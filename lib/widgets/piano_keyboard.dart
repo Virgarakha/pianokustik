@@ -96,23 +96,174 @@ class _PianoKeyboardState extends State<PianoKeyboard> {
 class _PhotorealisticPianoPainter extends CustomPainter {
   final PracticeController controller;
 
-  // Height of the luminous champagne gold rail at the top
   static const double goldRailHeight = 5.0;
   static const double frontLipHeight = 6.0;
 
-  // Pre-allocated static paints (Zero per-frame allocations)
+  // Pre-allocated static paints
   static final Paint _whiteGapPaint = Paint()
     ..color = const Color(0xFF28231E)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.0;
 
   static final Paint _blackDropShadowPaint = Paint()
-    ..color = const Color(0x88000000); // Realistic 3D cast shadow
+    ..color = const Color(0x88000000);
 
   static final Paint _blackBorderPaint = Paint()
     ..color = const Color(0xFF141210)
     ..style = PaintingStyle.stroke
     ..strokeWidth = 1.0;
+
+  static final Paint _filamentPaint = Paint()
+    ..color = Colors.white
+    ..strokeWidth = 1.2;
+
+  static final Paint _creasePaint = Paint()
+    ..color = const Color(0xFF1E1A16)
+    ..strokeWidth = 0.8;
+
+  // Cached shaders and gradient paints (reused across all 88 keys with 0 allocations)
+  static double _cachedTotalHeight = 0.0;
+  static double _cachedTotalWidth = 0.0;
+  static NoteColorTheme? _cachedTheme;
+
+  static late Paint _cachedIvoryPaint;
+  static late Paint _cachedLipPaint;
+  static late Paint _cachedEbonyPaint;
+  static late Paint _cachedSlopePaint;
+  static late Paint _cachedRidgePaint;
+  static late Paint _cachedRailPaint;
+  static late Paint _cachedTopGlowPaint;
+  static late Paint _cachedGlowDownPaint;
+  static late Paint _activeTrebleWhitePaint;
+  static late Paint _activeBassWhitePaint;
+  static late Paint _activeTrebleBlackPaint;
+  static late Paint _activeBassBlackPaint;
+
+  static void _ensurePaintsInitialized(double totalWidth, double totalHeight, NoteColorTheme theme) {
+    if (_cachedTotalHeight == totalHeight &&
+        _cachedTotalWidth == totalWidth &&
+        _cachedTheme == theme) {
+      return;
+    }
+    _cachedTotalHeight = totalHeight;
+    _cachedTotalWidth = totalWidth;
+    _cachedTheme = theme;
+
+    final keyHeight = totalHeight - goldRailHeight;
+    final surfaceHeight = keyHeight - frontLipHeight;
+    final keyLength = keyHeight * 0.64;
+
+    _cachedIvoryPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: const [
+          Color(0xFFECE6DC),
+          Color(0xFFFAF7F2),
+          Color(0xFFF3ECE2),
+          Color(0xFFE5DDD2),
+        ],
+        stops: const [0.0, 0.15, 0.85, 1.0],
+      ).createShader(Rect.fromLTWH(0, goldRailHeight, 1, surfaceHeight));
+
+    _cachedLipPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0xFFD8D0C4),
+          Color(0xFFEAE3D8),
+          Color(0xFFC8BFB2),
+        ],
+      ).createShader(Rect.fromLTWH(0, totalHeight - frontLipHeight, 1, frontLipHeight));
+
+    _cachedEbonyPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0xFF38332C),
+          Color(0xFF26221D),
+          Color(0xFF191714),
+          Color(0xFF100F0D),
+        ],
+        stops: [0.0, 0.15, 0.8, 1.0],
+      ).createShader(Rect.fromLTWH(0, goldRailHeight, 1, keyLength));
+
+    _cachedSlopePaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Color(0xFF38322A), Color(0xFF181512)],
+      ).createShader(const Rect.fromLTWH(0, 0, 1, 6.0));
+
+    _cachedRidgePaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: [
+          Color(0x33FFFFFF),
+          Colors.transparent,
+          Color(0x22FFFFFF),
+        ],
+      ).createShader(const Rect.fromLTWH(0, 0, 10.0, 1.0));
+
+    _cachedTopGlowPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [theme.glow.withAlpha(89), Colors.transparent],
+      ).createShader(Rect.fromLTWH(0, 0, totalWidth, 6.0));
+
+    _cachedRailPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          theme.primaryHighlight.withAlpha(204),
+          theme.railCore,
+          theme.railBevel,
+        ],
+        stops: const [0.0, 0.45, 1.0],
+      ).createShader(Rect.fromLTWH(0, 0, totalWidth, goldRailHeight));
+
+    _cachedGlowDownPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [theme.glow.withAlpha(89), Colors.transparent],
+      ).createShader(Rect.fromLTWH(0, goldRailHeight, totalWidth, 4.0));
+
+    _activeTrebleWhitePaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Colors.white, theme.primaryHighlight, theme.primary],
+        stops: const [0.0, 0.25, 1.0],
+      ).createShader(Rect.fromLTWH(0, goldRailHeight, 1, surfaceHeight));
+
+    _activeBassWhitePaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [Colors.white, theme.primaryHighlight, theme.secondary],
+        stops: const [0.0, 0.25, 1.0],
+      ).createShader(Rect.fromLTWH(0, goldRailHeight, 1, surfaceHeight));
+
+    _activeTrebleBlackPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [theme.primaryHighlight, theme.primary],
+      ).createShader(Rect.fromLTWH(0, goldRailHeight, 1, keyLength));
+
+    _activeBassBlackPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [theme.secondary, theme.primary],
+      ).createShader(Rect.fromLTWH(0, goldRailHeight, 1, keyLength));
+  }
 
   _PhotorealisticPianoPainter({
     required this.controller,
@@ -123,17 +274,19 @@ class _PhotorealisticPianoPainter extends CustomPainter {
     final totalWidth = size.width;
     final totalHeight = size.height;
 
+    _ensurePaintsInitialized(totalWidth, totalHeight, controller.noteColorTheme);
+
     // 1. Draw Spotlight Beams shining down from active notes
     _drawSpotlightBeams(canvas, totalWidth, totalHeight);
 
-    // 2. Draw all White Keys with realistic warm ivory gradients and 3D front lips
+    // 2. Draw all White Keys
     for (final key in PianoGeometry.allKeys) {
       if (!key.isBlack) {
         _drawRealisticWhiteKey(canvas, key, totalWidth, totalHeight);
       }
     }
 
-    // 3. Draw all Black Keys with 3D bevels, slopes, and drop shadows
+    // 3. Draw all Black Keys
     for (final key in PianoGeometry.allKeys) {
       if (key.isBlack) {
         _drawRealisticBlackKey(canvas, key, totalWidth, totalHeight);
@@ -144,56 +297,24 @@ class _PhotorealisticPianoPainter extends CustomPainter {
     _drawLightRail(canvas, totalWidth);
   }
 
-  /// Luminous Light Rail running above the keys, styled with the active color theme
   void _drawLightRail(Canvas canvas, double totalWidth) {
-    final theme = controller.noteColorTheme;
-
-    // 1. Ambient warm upward light spill into waterfall
+    // 1. Ambient warm upward light spill
     final topGlowRect = Rect.fromLTWH(0, 0, totalWidth, 6.0);
-    final topGlowPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.bottomCenter,
-        end: Alignment.topCenter,
-        colors: [theme.glow.withValues(alpha: 0.35), Colors.transparent],
-      ).createShader(topGlowRect);
-    canvas.drawRect(topGlowRect, topGlowPaint);
+    canvas.drawRect(topGlowRect, _cachedTopGlowPaint);
 
     // 2. Base brass/bronze rail bevel
     final railRect = Rect.fromLTWH(0, 0, totalWidth, goldRailHeight);
-    final railPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [
-          theme.primaryHighlight.withValues(alpha: 0.8),
-          theme.railCore,
-          theme.railBevel,
-        ],
-        stops: const [0.0, 0.45, 1.0],
-      ).createShader(railRect);
-    canvas.drawRect(railRect, railPaint);
+    canvas.drawRect(railRect, _cachedRailPaint);
 
-    // 3. Super bright specular neon filament line in the center
-    final filamentPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 1.2;
-    canvas.drawLine(const Offset(0, 2.2), Offset(totalWidth, 2.2), filamentPaint);
+    // 3. Super bright specular filament line
+    canvas.drawLine(const Offset(0, 2.2), Offset(totalWidth, 2.2), _filamentPaint);
 
-    // 4. Ambient glow cast downwards onto keys
+    // 4. Ambient glow cast downwards
     final shadowRect = Rect.fromLTWH(0, goldRailHeight, totalWidth, 4.0);
-    final glowDownPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [theme.glow.withValues(alpha: 0.35), Colors.transparent],
-      ).createShader(shadowRect);
-    canvas.drawRect(shadowRect, glowDownPaint);
+    canvas.drawRect(shadowRect, _cachedGlowDownPaint);
 
     // 5. Crease line directly under the rail
-    final creasePaint = Paint()
-      ..color = const Color(0xFF1E1A16)
-      ..strokeWidth = 0.8;
-    canvas.drawLine(const Offset(0, goldRailHeight), Offset(totalWidth, goldRailHeight), creasePaint);
+    canvas.drawLine(const Offset(0, goldRailHeight), Offset(totalWidth, goldRailHeight), _creasePaint);
   }
 
   void _drawSpotlightBeams(Canvas canvas, double totalWidth, double totalHeight) {
@@ -222,8 +343,8 @@ class _PhotorealisticPianoPainter extends CustomPainter {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            beamColor.withValues(alpha: 0.50),
-            beamColor.withValues(alpha: 0.15),
+            beamColor.withAlpha(128),
+            beamColor.withAlpha(38),
             Colors.transparent,
           ],
         ).createShader(Rect.fromLTWH(left - 8.0, goldRailHeight, (right - left) + 16.0, totalHeight));
@@ -248,15 +369,11 @@ class _PhotorealisticPianoPainter extends CustomPainter {
     final isPressed = isUserPressed || isSongActive;
     final isBass = key.pitch < 60;
 
-    // A real white key starts right under the champagne gold rail
     final keyTop = goldRailHeight;
     final keyBottom = totalHeight;
     final keyHeight = keyBottom - keyTop;
-
-    // When pressed, the key has a subtle 2px physical depression
     final pressOffset = isPressed ? 2.0 : 0.0;
 
-    // Main surface rect
     final surfaceRect = Rect.fromLTWH(
       left,
       keyTop + pressOffset,
@@ -264,7 +381,6 @@ class _PhotorealisticPianoPainter extends CustomPainter {
       keyHeight - frontLipHeight - pressOffset,
     );
 
-    // Front 3D lip rect (the physical vertical block thickness of real piano keys)
     final lipRect = Rect.fromLTWH(
       left,
       keyBottom - frontLipHeight,
@@ -279,63 +395,26 @@ class _PhotorealisticPianoPainter extends CustomPainter {
     );
 
     if (isPressed) {
-      // Active glowing key based on user chosen theme
-      final theme = controller.noteColorTheme;
-      final activeColor1 = theme.primaryHighlight;
-      final activeColor2 = isBass ? theme.secondary : theme.primary;
-
-      final activePaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Colors.white, activeColor1, activeColor2],
-          stops: const [0.0, 0.25, 1.0],
-        ).createShader(surfaceRect);
-      canvas.drawRRect(rrect, activePaint);
+      canvas.drawRRect(rrect, isBass ? _activeBassWhitePaint : _activeTrebleWhitePaint);
     } else {
-      // Photorealistic Warm Vintage Ivory White Key shading
-      final ivoryPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: const [
-            Color(0xFFECE6DC), // Soft ambient shadow under gold rail
-            Color(0xFFFAF7F2), // Warm ivory sheen
-            Color(0xFFF3ECE2), // Pure ivory middle
-            Color(0xFFE5DDD2), // Slight shading towards bottom
-          ],
-          stops: const [0.0, 0.15, 0.85, 1.0],
-        ).createShader(surfaceRect);
-      canvas.drawRect(surfaceRect, ivoryPaint);
-
-      // Draw the 3D Front Lip of the white key
-      final lipPaint = Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFFD8D0C4), // Joint crease shadow
-            Color(0xFFEAE3D8), // Front reflection
-            Color(0xFFC8BFB2), // Bottom rounded edge
-          ],
-        ).createShader(lipRect);
+      canvas.drawRect(surfaceRect, _cachedIvoryPaint);
 
       final lipRRect = RRect.fromRectAndCorners(
         lipRect,
         bottomLeft: const Radius.circular(2.5),
         bottomRight: const Radius.circular(2.5),
       );
-      canvas.drawRRect(lipRRect, lipPaint);
+      canvas.drawRRect(lipRRect, _cachedLipPaint);
     }
 
-    // Crisp gap divider line between white keys
+    // Crisp gap divider line
     canvas.drawLine(
       Offset(right, keyTop + pressOffset),
       Offset(right, keyBottom),
       _whiteGapPaint,
     );
 
-    // Key Labels based on controller.keyLabelMode
+    // Key Labels
     switch (controller.keyLabelMode) {
       case KeyLabelMode.notAngka:
         final tp = PianoGeometry.notAngkaTextPainters[key.pitch];
@@ -393,7 +472,7 @@ class _PhotorealisticPianoPainter extends CustomPainter {
     final keyLength = (totalHeight - goldRailHeight) * 0.64;
     final pressOffset = isPressed ? 1.5 : 0.0;
 
-    // 1. Realistic 3D Cast Drop Shadow onto adjacent white keys
+    // 1. Cast shadow
     final shadowRRect = RRect.fromRectAndCorners(
       Rect.fromLTWH(left + 2.5, keyTop + pressOffset + 2.0, keyWidth + 1.0, keyLength + 3.0),
       bottomLeft: const Radius.circular(2.5),
@@ -401,7 +480,7 @@ class _PhotorealisticPianoPainter extends CustomPainter {
     );
     canvas.drawRRect(shadowRRect, _blackDropShadowPaint);
 
-    // 2. Black Key Body Rect
+    // 2. Black Key Body
     final bodyRect = Rect.fromLTWH(
       left,
       keyTop + pressOffset,
@@ -415,59 +494,18 @@ class _PhotorealisticPianoPainter extends CustomPainter {
     );
 
     if (isPressed) {
-      final theme = controller.noteColorTheme;
-      final activeColor1 = isBass ? theme.secondary : theme.primaryHighlight;
-      final activeColor2 = theme.primary;
-
-      final activePaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [activeColor1, activeColor2],
-        ).createShader(bodyRect);
-      canvas.drawRRect(bodyRRect, activePaint);
+      canvas.drawRRect(bodyRRect, isBass ? _activeBassBlackPaint : _activeTrebleBlackPaint);
     } else {
-      // 3. Realistic Matte Ebony Wood Texture with 3D Bevel
-      final ebonyPaint = Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            Color(0xFF38332C), // Top edge catch light
-            Color(0xFF26221D), // Matte ebony upper body
-            Color(0xFF191714), // Deep ebony lower body
-            Color(0xFF100F0D), // Bottom tip
-          ],
-          stops: [0.0, 0.15, 0.8, 1.0],
-        ).createShader(bodyRect);
-      canvas.drawRRect(bodyRRect, ebonyPaint);
+      canvas.drawRRect(bodyRRect, _cachedEbonyPaint);
 
-      // 4. Top Surface Bevel Highlight (the slight rounded ridge of real black keys)
       final ridgeRect = Rect.fromLTWH(left + 1.2, keyTop + pressOffset + 1.0, keyWidth - 2.4, keyLength * 0.88);
-      final ridgePaint = Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [
-            Color(0x33FFFFFF), // Left specular edge
-            Colors.transparent,
-            Color(0x22FFFFFF), // Right specular edge
-          ],
-        ).createShader(ridgeRect);
-      canvas.drawRRect(RRect.fromRectAndRadius(ridgeRect, const Radius.circular(1.0)), ridgePaint);
+      canvas.drawRRect(RRect.fromRectAndRadius(ridgeRect, const Radius.circular(1.0)), _cachedRidgePaint);
 
-      // 5. Front Beveled Slope at the bottom of the black key
       final frontSlope = Rect.fromLTWH(left + 0.8, keyTop + pressOffset + keyLength - 7.0, keyWidth - 1.6, 6.0);
-      final slopePaint = Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF38322A), Color(0xFF181512)],
-        ).createShader(frontSlope);
-      canvas.drawRRect(RRect.fromRectAndRadius(frontSlope, const Radius.circular(1.5)), slopePaint);
+      canvas.drawRRect(RRect.fromRectAndRadius(frontSlope, const Radius.circular(1.5)), _cachedSlopePaint);
     }
 
-    // Labels on black keys if in notAngka or noteName mode
+    // Labels
     if (controller.keyLabelMode == KeyLabelMode.notAngka) {
       final tp = PianoGeometry.notAngkaTextPainters[key.pitch];
       if (tp != null) {
@@ -493,5 +531,23 @@ class _PhotorealisticPianoPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _PhotorealisticPianoPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _PhotorealisticPianoPainter oldDelegate) {
+    if (oldDelegate.controller.noteColorTheme != controller.noteColorTheme ||
+        oldDelegate.controller.keyLabelMode != controller.keyLabelMode) {
+      return true;
+    }
+    final oldHeld = oldDelegate.controller.userHeldNotes;
+    final newHeld = controller.userHeldNotes;
+    if (oldHeld.length != newHeld.length) return true;
+    for (final k in newHeld.keys) {
+      if (!oldHeld.containsKey(k)) return true;
+    }
+    final oldSong = oldDelegate.controller.songActiveNotes;
+    final newSong = controller.songActiveNotes;
+    if (oldSong.length != newSong.length) return true;
+    for (final k in newSong.keys) {
+      if (!oldSong.containsKey(k)) return true;
+    }
+    return false;
+  }
 }

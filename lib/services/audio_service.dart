@@ -33,20 +33,18 @@ class AudioService {
   }
 
   /// Play a piano note with specific pitch (21..108) and velocity (0..127)
-  Future<void> playNote(int pitch, {int velocity = 100}) async {
+  void playNote(int pitch, {int velocity = 100}) {
     if (isMuted || pitch < 21 || pitch > 108) return;
 
     final wavBytes = _getOrCreateWav(pitch);
     final player = _players[_currentVoice];
     _currentVoice = (_currentVoice + 1) % _voicePoolSize;
 
-    try {
-      final volume = (velocity / 127.0).clamp(0.1, 1.0);
-      await player.setVolume(volume);
-      await player.play(BytesSource(wavBytes));
-    } catch (e) {
-      debugPrint('[AudioService] Play error: $e');
-    }
+    final volume = (velocity / 127.0).clamp(0.1, 1.0);
+    // Non-blocking fire-and-forget so audio calls never hitch or stall 60 FPS animation
+    player.setVolume(volume).then((_) {
+      player.play(BytesSource(wavBytes)).catchError((_) {});
+    }).catchError((_) {});
   }
 
   /// Stop all voices

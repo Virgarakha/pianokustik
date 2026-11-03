@@ -95,14 +95,31 @@ class PracticeController extends ChangeNotifier {
   KeyLabelMode get keyLabelMode => _keyLabelMode;
   bool get showFlyingStickLabels => _showFlyingStickLabels;
   bool get showLiveChord => _showLiveChord;
+  String? _cachedSimpleChord;
+  int _lastSimpleChordHash = -1;
+
   String? get currentDetectedChord =>
       _showLiveChord ? ChordDetector.detectChord(_userHeldNotes.keys) : null;
+
   String? get currentDetectedChordSimple {
     if (!_showLiveChord) return null;
     final pitches = _mode == PlayMode.freePlay
         ? _userHeldNotes.keys
         : (_userHeldNotes.isNotEmpty ? _userHeldNotes.keys : _songActiveNotes.keys);
-    return ChordDetector.detectSimpleChord(pitches);
+    if (pitches.isEmpty) {
+      _cachedSimpleChord = null;
+      _lastSimpleChordHash = 0;
+      return null;
+    }
+    int hash = 0;
+    for (final p in pitches) {
+      hash ^= (p * 31);
+    }
+    if (hash != _lastSimpleChordHash) {
+      _lastSimpleChordHash = hash;
+      _cachedSimpleChord = ChordDetector.detectSimpleChord(pitches);
+    }
+    return _cachedSimpleChord;
   }
 
   double get accuracy => _totalNotesPassed == 0
@@ -194,6 +211,7 @@ class PracticeController extends ChangeNotifier {
     for (final note in _currentSong!.notes) {
       if (note.startTimeMs >= _currentTimeMs) {
         note.isHit = false;
+        note.isSoundPlayed = false;
       }
     }
     notifyListeners();
@@ -254,7 +272,7 @@ class PracticeController extends ChangeNotifier {
       return;
     }
 
-    final deltaSeconds = (elapsed - _lastTick).inMicroseconds / 1000000.0;
+    final deltaSeconds = ((elapsed - _lastTick).inMicroseconds / 1000000.0).clamp(0.0, 0.05);
     _lastTick = elapsed;
 
     // --- Mode 1: Free Play Mode ---
@@ -339,11 +357,14 @@ class PracticeController extends ChangeNotifier {
     final now = _currentTimeMs.round();
 
     _songActiveNotes.clear();
-    for (final note in _currentSong!.notes) {
+    // Fast O(log N) binary search window instead of iterating entire song
+    final windowNotes = _currentSong!.getNotesInWindow(now - 3000, now + 100);
+    for (final note in windowNotes) {
       if (note.isActiveAt(now)) {
         _songActiveNotes[note.pitch] = note;
 
-        if (_mode == PlayMode.listen && (now - note.startTimeMs).abs() < 25) {
+        if (_mode == PlayMode.listen && !note.isSoundPlayed && now >= note.startTimeMs) {
+          note.isSoundPlayed = true;
           audioService.playNote(note.pitch, velocity: note.velocity);
         }
       }

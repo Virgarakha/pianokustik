@@ -14,6 +14,7 @@ class _WaterfallThemePaints {
   final Paint activeGlowAura;
   final Paint border;
   final Paint activeBorder;
+  final Paint crownPaint;
 
   _WaterfallThemePaints({required NoteColorTheme theme})
       : trebleBody = Paint()
@@ -41,10 +42,13 @@ class _WaterfallThemePaints {
         activeBorder = Paint()
           ..color = const Color(0xFFFFFFFF)
           ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.5;
+          ..strokeWidth = 1.5,
+        crownPaint = Paint()
+          ..color = theme.primaryHighlight
+          ..style = PaintingStyle.fill;
 }
 
-class WaterfallVisualizer extends StatelessWidget {
+class WaterfallVisualizer extends StatefulWidget {
   final PracticeController controller;
 
   const WaterfallVisualizer({
@@ -53,22 +57,38 @@ class WaterfallVisualizer extends StatelessWidget {
   });
 
   @override
+  State<WaterfallVisualizer> createState() => _WaterfallVisualizerState();
+}
+
+class _WaterfallVisualizerState extends State<WaterfallVisualizer>
+    with SingleTickerProviderStateMixin {
+  // Smooth native VSync anchor for Windows desktop (60Hz - 144Hz)
+  late final AnimationController _vsyncController = AnimationController(
+    vsync: this,
+    duration: const Duration(seconds: 1),
+  )..repeat();
+
+  @override
+  void dispose() {
+    _vsyncController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return ClipRect(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (details) {
-          // If visualizer is clicked while notes are held/stuck, clear them immediately!
-          if (controller.userHeldNotes.isNotEmpty || controller.freePlayNotes.any((n) => n.isHeld)) {
-            controller.clearAllHeldNotes();
-          }
-        },
-        child: CustomPaint(
-          size: Size.infinite,
-          painter: _ChampagneGoldWaterfallPainter(
-            controller: controller,
-            repaint: controller.visualizerTicker,
-          ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTapDown: (details) {
+        if (widget.controller.userHeldNotes.isNotEmpty ||
+            widget.controller.freePlayNotes.any((n) => n.isHeld)) {
+          widget.controller.clearAllHeldNotes();
+        }
+      },
+      child: CustomPaint(
+        size: Size.infinite,
+        painter: _ChampagneGoldWaterfallPainter(
+          controller: widget.controller,
+          repaint: Listenable.merge([widget.controller.visualizerTicker, _vsyncController]),
         ),
       ),
     );
@@ -79,10 +99,8 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
   final PracticeController controller;
 
   // --- Pre-allocated Static Paints (Zero per-frame allocations) ---
-  // Background: Warm Obsidian Charcoal
   static final Paint _bgPaint = Paint()..color = const Color(0xFF131211);
 
-  // Piano Key Vertical Guides (Very subtle warm gold hairline)
   static final Paint _laneGuidePaint = Paint()
     ..color = const Color(0x0EE8D7C3)
     ..strokeWidth = 0.8;
@@ -91,23 +109,16 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
     ..color = const Color(0x1FE8D7C3)
     ..strokeWidth = 1.0;
 
-  // Static Theme Paints mapped by NoteColorTheme
   static final Map<NoteColorTheme, _WaterfallThemePaints> _themePaintsMap = {
     for (final theme in NoteColorTheme.values)
       theme: _WaterfallThemePaints(theme: theme),
   };
 
-  // Crystal Inner Gloss Reflection
-  static final Paint _glossPaint = Paint()
-    ..color = const Color(0x55FFFFFF) // Subtle specular glass highlight
-    ..style = PaintingStyle.fill;
-
-  // Strike line & Flare
   static final Paint _strikeLinePaint = Paint()
     ..color = const Color(0x88FFE6C4)
     ..strokeWidth = 1.2;
 
-  // Stardust Particle Mist (Precomputed 120 points)
+  // Stardust Particle Mist (Fixed pre-allocated buffer: ZERO garbage collection)
   static final Paint _particleGoldPaint = Paint()
     ..color = const Color(0x66FFE3BE)
     ..strokeWidth = 1.5
@@ -118,18 +129,49 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
     ..strokeWidth = 1.2
     ..strokeCap = StrokeCap.round;
 
-  static final List<Offset> _stardustPoints = _initStardust();
+  static const int _particleCount = 48;
+  static final List<Offset> _stardustBase = _initStardustBase();
   static final List<double> _stardustSpeeds = _initStardustSpeeds();
+  static final List<Offset> _goldPoints = List.filled(32, Offset.zero);
+  static final List<Offset> _whitePoints = List.filled(16, Offset.zero);
 
-  static List<Offset> _initStardust() {
+  static List<Offset> _initStardustBase() {
     final rng = Random(42);
-    return List.generate(120, (_) => Offset(rng.nextDouble(), rng.nextDouble()));
+    return List.generate(_particleCount, (_) => Offset(rng.nextDouble(), rng.nextDouble()));
   }
 
   static List<double> _initStardustSpeeds() {
     final rng = Random(42);
-    return List.generate(120, (_) => 0.025 + rng.nextDouble() * 0.05);
+    return List.generate(_particleCount, (_) => 0.025 + rng.nextDouble() * 0.05);
   }
+
+  // Reusable burst geometries (0 allocations per frame)
+  static final Path _cachedCrownPath = Path();
+  static final Path _cachedInnerPath = Path();
+  static final Paint _burstBaseLinePaint = Paint()
+    ..color = const Color(0xFFFFFFFF)
+    ..strokeWidth = 3.0
+    ..strokeCap = StrokeCap.round;
+
+  static final Paint _burstAuraPaint = Paint()..style = PaintingStyle.fill;
+  static final Paint _burstCorePaint = Paint()
+    ..color = const Color(0xDDFFFFFF)
+    ..style = PaintingStyle.fill;
+
+  static final Paint _burstInnerPaint = Paint()
+    ..color = const Color(0xF2FFFFFF)
+    ..style = PaintingStyle.fill;
+
+  static const List<double> _peakRelX = [
+    -0.95, -0.80, -0.65, -0.49, -0.33, -0.17, 0.0, 0.17, 0.33, 0.49, 0.65, 0.80, 0.95
+  ];
+
+  static const List<double> _peakBaseH = [
+    8.0, 16.0, 11.0, 20.0, 16.0, 25.0, 28.0, 24.0, 17.0, 21.0, 12.0, 17.0, 8.0
+  ];
+
+  static String? _lastChordText;
+  static TextPainter? _cachedChordPainter;
 
   _ChampagneGoldWaterfallPainter({
     required this.controller,
@@ -141,20 +183,23 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
     final width = size.width;
     final height = size.height;
 
+    // Hardware scissor clip (zero offscreen buffer overhead)
+    canvas.clipRect(Offset.zero & size);
+
     final t = controller.mode == PlayMode.freePlay
         ? controller.freePlayTimeMs / 1000.0
         : controller.currentTimeMs / 1000.0;
 
     // 1. Warm Obsidian Charcoal background
-    canvas.drawRect(Rect.fromLTWH(0, 0, width, height), _bgPaint);
+    canvas.drawRect(Offset.zero & size, _bgPaint);
 
     // 2. Piano key vertical grid lines
     _drawLaneGuides(canvas, width, height);
 
-    // 3. Stardust particle mist
+    // 3. Stardust particle mist (zero allocation)
     _drawStardust(canvas, width, height, t);
 
-    // 5. Render notes
+    // 4. Render notes
     if (controller.mode == PlayMode.freePlay) {
       _drawFreePlayNotes(canvas, width, height);
     } else {
@@ -163,14 +208,14 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
       }
     }
 
-    // 6. Strike line at the base
+    // 5. Strike line at the base
     final lineY = height - 1.0;
     canvas.drawLine(Offset(0, lineY), Offset(width, lineY), _strikeLinePaint);
 
-    // 7. Glowing strike bursts on active keys (Synthesia sharp spiky sparks & radiant glow)
+    // 6. Glowing strike bursts on active keys
     _drawActiveStrikeGlows(canvas, width, height, t * 1000.0);
 
-    // 8. Chord display at bottom-left above piano (Simple & semi-transparent)
+    // 7. Chord display at bottom-left above piano (Simple & semi-transparent)
     if (controller.showLiveChord) {
       _drawBottomLeftChord(canvas, height);
     }
@@ -194,30 +239,32 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
     }
   }
 
-
   void _drawStardust(Canvas canvas, double width, double height, double t) {
-    final goldPoints = <Offset>[];
-    final whitePoints = <Offset>[];
+    int gIdx = 0;
+    int wIdx = 0;
 
-    for (int i = 0; i < _stardustPoints.length; i++) {
-      final base = _stardustPoints[i];
+    for (int i = 0; i < _particleCount; i++) {
+      final base = _stardustBase[i];
       final speed = _stardustSpeeds[i];
-      // Float upward gently
       final curY = ((base.dy - (t * speed)) % 1.0) * height;
       final curX = base.dx * width;
 
       if (i % 3 == 0) {
-        whitePoints.add(Offset(curX, curY));
+        if (wIdx < 16) {
+          _whitePoints[wIdx++] = Offset(curX, curY);
+        }
       } else {
-        goldPoints.add(Offset(curX, curY));
+        if (gIdx < 32) {
+          _goldPoints[gIdx++] = Offset(curX, curY);
+        }
       }
     }
 
-    canvas.drawPoints(PointMode.points, goldPoints, _particleGoldPaint);
-    canvas.drawPoints(PointMode.points, whitePoints, _particleWhitePaint);
+    canvas.drawPoints(PointMode.points, _goldPoints, _particleGoldPaint);
+    canvas.drawPoints(PointMode.points, _whitePoints, _particleWhitePaint);
   }
 
-  /// Synthesia Free Play: Notes fly UPWARDS as glowing pill sticks with selected theme color
+  /// Synthesia Free Play: Notes fly UPWARDS with selected theme color
   void _drawFreePlayNotes(Canvas canvas, double width, double height) {
     final nowMs = controller.freePlayTimeMs;
     final leadTimeMs = controller.leadTimeMs.toDouble();
@@ -242,37 +289,31 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
       final rrect = RRect.fromRectAndRadius(rect, const Radius.circular(5.0));
 
       final isBass = note.pitch < 60;
+      final isHeld = note.isHeld;
       final bodyPaint = isBass
-          ? (note.isHeld ? themePaints.bassActiveBody : themePaints.bassBody)
-          : (note.isHeld ? themePaints.trebleActiveBody : themePaints.trebleBody);
+          ? (isHeld ? themePaints.bassActiveBody : themePaints.bassBody)
+          : (isHeld ? themePaints.trebleActiveBody : themePaints.trebleBody);
 
-      // 1. Draw glowing aura around the note
-      final glowRect = Rect.fromCenter(
-        center: rect.center,
-        width: noteWidth + 10.0,
-        height: renderedHeight + 8.0,
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(glowRect, const Radius.circular(8.0)),
-        note.isHeld ? themePaints.activeGlowAura : themePaints.glowAura,
-      );
+      // 1. Draw glowing aura ONLY for held/striking notes (saves 50% GPU fill-rate)
+      if (isHeld) {
+        final glowRect = Rect.fromCenter(
+          center: rect.center,
+          width: noteWidth + 10.0,
+          height: renderedHeight + 8.0,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(glowRect, const Radius.circular(8.0)),
+          themePaints.activeGlowAura,
+        );
+      }
 
       // 2. Draw note pill body
       canvas.drawRRect(rrect, bodyPaint);
 
-      // 3. Draw inner gloss reflection highlight
-      final glossRect = Rect.fromLTWH(
-        left + 1.0,
-        yBottom - renderedHeight + 1.0,
-        max(1.5, noteWidth * 0.35),
-        renderedHeight - 2.0,
-      );
-      canvas.drawRRect(RRect.fromRectAndRadius(glossRect, const Radius.circular(2.0)), _glossPaint);
+      // 3. Draw crisp border
+      canvas.drawRRect(rrect, isHeld ? themePaints.activeBorder : themePaints.border);
 
-      // 4. Draw crisp glowing border
-      canvas.drawRRect(rrect, note.isHeld ? themePaints.activeBorder : themePaints.border);
-
-      // 5. Draw flying stick label (Not Angka / Note Name inside the pill stick)
+      // 4. Draw stick label if enabled
       if (controller.showFlyingStickLabels && renderedHeight >= 14.0) {
         final tp = controller.keyLabelMode == KeyLabelMode.noteName
             ? PianoGeometry.flyingStickNoteNamePainters[note.pitch]
@@ -317,33 +358,26 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
           ? (isCurrentlyActive ? themePaints.bassActiveBody : themePaints.bassBody)
           : (isCurrentlyActive ? themePaints.trebleActiveBody : themePaints.trebleBody);
 
-      // 1. Outer Glow Aura
-      final glowRect = Rect.fromCenter(
-        center: rect.center,
-        width: noteWidth + 8.0,
-        height: noteHeight + 6.0,
-      );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(glowRect, const Radius.circular(7.0)),
-        isCurrentlyActive ? themePaints.activeGlowAura : themePaints.glowAura,
-      );
+      // 1. Outer Glow Aura (only on active notes)
+      if (isCurrentlyActive) {
+        final glowRect = Rect.fromCenter(
+          center: rect.center,
+          width: noteWidth + 8.0,
+          height: noteHeight + 6.0,
+        );
+        canvas.drawRRect(
+          RRect.fromRectAndRadius(glowRect, const Radius.circular(7.0)),
+          themePaints.activeGlowAura,
+        );
+      }
 
       // 2. Note body
       canvas.drawRRect(rrect, bodyPaint);
 
-      // 3. Inner gloss highlight
-      final glossRect = Rect.fromLTWH(
-        left + 1.0,
-        topY + 1.0,
-        max(1.5, noteWidth * 0.35),
-        noteHeight - 2.0,
-      );
-      canvas.drawRRect(RRect.fromRectAndRadius(glossRect, const Radius.circular(2.0)), _glossPaint);
-
-      // 4. Glowing border
+      // 3. Glowing border
       canvas.drawRRect(rrect, isCurrentlyActive ? themePaints.activeBorder : themePaints.border);
 
-      // 5. Draw stick label if enabled
+      // 4. Draw stick label if enabled
       if (controller.showFlyingStickLabels && noteHeight >= 14.0) {
         final tp = controller.keyLabelMode == KeyLabelMode.noteName
             ? PianoGeometry.flyingStickNoteNamePainters[note.pitch]
@@ -356,23 +390,6 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
       }
     }
   }
-
-  // --- Synthesia Glowing Strike Flare & Starburst ---
-  static final Paint _burstBaseLinePaint = Paint()
-    ..color = const Color(0xFFFFFFFF)
-    ..strokeWidth = 3.0
-    ..strokeCap = StrokeCap.round;
-
-  static const List<double> _peakRelX = [
-    -0.95, -0.80, -0.65, -0.49, -0.33, -0.17, 0.0, 0.17, 0.33, 0.49, 0.65, 0.80, 0.95
-  ];
-
-  static const List<double> _peakBaseH = [
-    8.0, 16.0, 11.0, 20.0, 16.0, 25.0, 28.0, 24.0, 17.0, 21.0, 12.0, 17.0, 8.0
-  ];
-
-  static String? _lastChordText;
-  static TextPainter? _cachedChordPainter;
 
   /// Renders active glowing spark bursts directly over the strike line for all held/striking keys
   void _drawActiveStrikeGlows(Canvas canvas, double width, double height, double nowMs) {
@@ -398,11 +415,12 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
       final (rawLeft, rawRight) = PianoGeometry.getHorizontalBounds(pitch, width);
       final cx = (rawLeft + rawRight) / 2.0;
       final kw = max(6.0, rawRight - rawLeft);
+
       _drawStrikeGlowBurst(canvas, cx, kw, height, theme, nowMs);
     }
   }
 
-  /// Synthesia Strike Flare: Sharp spiky sparks radiating upward with luminous bloom glow
+  /// Synthesia Strike Flare: Sharp spiky sparks radiating upward with zero shader allocation
   void _drawStrikeGlowBurst(
     Canvas canvas,
     double cx,
@@ -415,82 +433,52 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
     final halfW = burstWidth / 2.0;
     final baseY = height - 1.0;
 
-    // 1. Soft Outward Radial Glow Aura (colored halo bloom)
+    final themePaints = _themePaintsMap[theme] ?? _themePaintsMap[NoteColorTheme.gold]!;
+
+    // 1. Soft Outward Glow Aura
+    _burstAuraPaint.color = theme.glow.withAlpha(65);
     final auraRect = Rect.fromCenter(
       center: Offset(cx, baseY - 8.0),
-      width: burstWidth * 2.2,
-      height: 52.0,
+      width: burstWidth * 2.0,
+      height: 48.0,
     );
-    final auraPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          theme.glow.withValues(alpha: 0.60),
-          theme.glow.withValues(alpha: 0.22),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.5, 1.0],
-      ).createShader(auraRect);
-    canvas.drawOval(auraRect, auraPaint);
+    canvas.drawOval(auraRect, _burstAuraPaint);
 
-    // 2. High-Intensity Core Bloom (brilliant white-hot center)
+    // 2. High-Intensity Core Bloom
     final coreRect = Rect.fromCenter(
       center: Offset(cx, baseY - 4.0),
-      width: burstWidth * 1.25,
-      height: 26.0,
+      width: burstWidth * 1.15,
+      height: 24.0,
     );
-    final corePaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFFFFFFFF),
-          theme.primaryHighlight.withValues(alpha: 0.85),
-          Colors.transparent,
-        ],
-        stops: const [0.0, 0.45, 1.0],
-      ).createShader(coreRect);
-    canvas.drawOval(coreRect, corePaint);
+    canvas.drawOval(coreRect, _burstCorePaint);
 
-    // 3. Spiky Starburst Crown (sharp jagged sparks radiating upward - matching reference image)
-    final path = Path();
-    path.moveTo(cx - halfW, baseY);
+    // 3. Spiky Starburst Crown (reuse static Path)
+    _cachedCrownPath.reset();
+    _cachedCrownPath.moveTo(cx - halfW, baseY);
 
     const peakCount = 13;
     for (int i = 0; i < peakCount; i++) {
-      // Micro-shimmer oscillation for live electrical/spark feel
       final shimmer = sin((nowMs * 0.04) + (i * 1.6)) * 2.5;
       final peakH = max(5.0, _peakBaseH[i] + shimmer);
       final px = cx + (_peakRelX[i] * halfW);
       final py = baseY - peakH;
 
-      // Valley between peaks
       if (i > 0) {
         final prevPx = cx + (_peakRelX[i - 1] * halfW);
         final vx = (prevPx + px) / 2.0;
         final vy = baseY - (2.0 + (i % 2 == 0 ? 2.0 : 0.0));
-        path.lineTo(vx, vy);
+        _cachedCrownPath.lineTo(vx, vy);
       }
-      path.lineTo(px, py);
+      _cachedCrownPath.lineTo(px, py);
     }
-    path.lineTo(cx + halfW, baseY);
-    path.close();
+    _cachedCrownPath.lineTo(cx + halfW, baseY);
+    _cachedCrownPath.close();
 
-    // Fill crown with vertical gradient: white at base to theme highlight at tips
-    final crownRect = Rect.fromLTWH(cx - halfW, baseY - 32.0, burstWidth, 32.0);
-    final crownPaint = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.bottomCenter,
-        end: Alignment.topCenter,
-        colors: [
-          const Color(0xFFFFFFFF),
-          theme.primaryHighlight,
-          theme.primary.withValues(alpha: 0.9),
-        ],
-        stops: const [0.0, 0.35, 1.0],
-      ).createShader(crownRect);
-    canvas.drawPath(path, crownPaint);
+    canvas.drawPath(_cachedCrownPath, themePaints.crownPaint);
 
     // 4. Inner sharp needle sparks (core bright white needles)
-    final innerPath = Path();
-    innerPath.moveTo(cx - (halfW * 0.6), baseY);
+    _cachedInnerPath.reset();
+    _cachedInnerPath.moveTo(cx - (halfW * 0.6), baseY);
     for (int i = 3; i <= 9; i++) {
       final shimmer = sin((nowMs * 0.04) + (i * 1.6)) * 2.0;
       final peakH = max(4.0, (_peakBaseH[i] * 0.72) + shimmer);
@@ -499,17 +487,14 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
       if (i > 3) {
         final prevPx = cx + (_peakRelX[i - 1] * halfW * 0.85);
         final vx = (prevPx + px) / 2.0;
-        innerPath.lineTo(vx, baseY - 1.5);
+        _cachedInnerPath.lineTo(vx, baseY - 1.5);
       }
-      innerPath.lineTo(px, py);
+      _cachedInnerPath.lineTo(px, py);
     }
-    innerPath.lineTo(cx + (halfW * 0.6), baseY);
-    innerPath.close();
+    _cachedInnerPath.lineTo(cx + (halfW * 0.6), baseY);
+    _cachedInnerPath.close();
 
-    final innerPaint = Paint()
-      ..color = const Color(0xF2FFFFFF)
-      ..style = PaintingStyle.fill;
-    canvas.drawPath(innerPath, innerPaint);
+    canvas.drawPath(_cachedInnerPath, _burstInnerPaint);
 
     // 5. White-Hot Horizontal Baseline Flare (where key contacts strike line)
     final baseLineRect = Rect.fromCenter(
@@ -523,7 +508,7 @@ class _ChampagneGoldWaterfallPainter extends CustomPainter {
     );
   }
 
-  /// Chord display at bottom-left above piano (Simple & semi-transparent as seen in reference image)
+  /// Chord display at bottom-left above piano (Simple & semi-transparent)
   void _drawBottomLeftChord(Canvas canvas, double height) {
     final chord = controller.currentDetectedChordSimple;
     if (chord == null || chord.isEmpty) {
